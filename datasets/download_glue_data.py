@@ -7,156 +7,164 @@ import urllib.request
 import urllib.request as URLLIB
 import zipfile
 
-# URL map for GLUE tasks
-tasks = ["CoLA", "SST", "MRPC", "QQP", "STS", "MNLI", "QNLI", "RTE", "WNLI", "diagnostic"]
-TASK2PATH = {
-    "CoLA": 'https://dl.fbaipublicfiles.com/glue/data/CoLA.zip',
-    "SST": 'https://dl.fbaipublicfiles.com/glue/data/SST-2.zip',
-    "QQP": 'https://dl.fbaipublicfiles.com/glue/data/QQP-clean.zip',
-    "STS": 'https://dl.fbaipublicfiles.com/glue/data/STS-B.zip',
-    "MNLI": 'https://dl.fbaipublicfiles.com/glue/data/MNLI.zip',
-    "QNLI": 'https://dl.fbaipublicfiles.com/glue/data/QNLIv2.zip',
-    "RTE": 'https://dl.fbaipublicfiles.com/glue/data/RTE.zip',
-    "WNLI": 'https://dl.fbaipublicfiles.com/glue/data/WNLI.zip',
-    "diagnostic": 'https://dl.fbaipublicfiles.com/glue/data/AX.tsv'
+# GLUE task names (lowercase) and URLs
+TASKS = ["cola", "sst2", "mrpc", "qqp", "sts", "mnli", "qnli", "rte", "wnli", "diagnostic"]
+ZIP_URL = {
+    "cola": 'https://dl.fbaipublicfiles.com/glue/data/CoLA.zip',
+    "sst2": 'https://dl.fbaipublicfiles.com/glue/data/SST-2.zip',
+    "qqp":  'https://dl.fbaipublicfiles.com/glue/data/QQP-clean.zip',
+    "sts":  'https://dl.fbaipublicfiles.com/glue/data/STS-B.zip',
+    "mnli": 'https://dl.fbaipublicfiles.com/glue/data/MNLI.zip',
+    "qnli": 'https://dl.fbaipublicfiles.com/glue/data/QNLIv2.zip',
+    "rte":  'https://dl.fbaipublicfiles.com/glue/data/RTE.zip',
+    "wnli": 'https://dl.fbaipublicfiles.com/glue/data/WNLI.zip',
 }
-
-# URLs for MRPC data
-default_mrpc_train = 'https://dl.fbaipublicfiles.com/senteval/senteval_data/msr_paraphrase_train.txt'
-default_mrpc_test = 'https://dl.fbaipublicfiles.com/senteval/senteval_data/msr_paraphrase_test.txt'
-# Fallback dev_ids.tsv sources
+DIAG_URL       = 'https://dl.fbaipublicfiles.com/glue/data/AX.tsv'
+MRPC_TRAIN     = 'https://dl.fbaipublicfiles.com/senteval/senteval_data/msr_paraphrase_train.txt'
+MRPC_TEST      = 'https://dl.fbaipublicfiles.com/senteval/senteval_data/msr_paraphrase_test.txt'
 DEV_IDS_SOURCES = [
     'https://raw.githubusercontent.com/MegEngine/Models/master/official/nlp/bert/glue_data/MRPC/dev_ids.tsv',
     'https://raw.githubusercontent.com/nyu-mll/GLUE-baselines/master/glue_data/MRPC/dev_ids.tsv'
 ]
 
+def fetch_and_unzip(task: str, data_dir: str):
+    """Download ZIP for `task`, extract into <data_dir>/<task>/."""
+    url    = ZIP_URL[task]
+    zip_fp = os.path.join(data_dir, f"{task}.zip")
+    outdir = os.path.join(data_dir, task)
 
-def download_and_extract(task, data_dir):
-    print(f"Downloading and extracting {task}...")
-    if task == "MNLI":
-        print("\tNote: SNLI is no longer included; format manually if needed.")
-    zip_path = os.path.join(data_dir, f"{task}.zip")
-    urllib.request.urlretrieve(TASK2PATH[task], zip_path)
+    print(f"→ {task}: downloading ZIP…")
+    urllib.request.urlretrieve(url, zip_fp)
 
-    # extract
-    with zipfile.ZipFile(zip_path, 'r') as z:
-        # For SST, rename SST-2 -> sst2
-        if task == "SST":
-            temp_dir = os.path.join(data_dir, "SST_tmp")
-            z.extractall(temp_dir)
-            # extracted folder is SST-2
-            src = os.path.join(temp_dir, "SST-2")
-            dst = os.path.join(data_dir, "sst2")
-            if os.path.isdir(dst):
-                shutil.rmtree(dst)
-            shutil.move(src, dst)
-            shutil.rmtree(temp_dir)
-        else:
-            z.extractall(data_dir)
-    os.remove(zip_path)
-    print("\tDone.")
+    tmp = os.path.join(data_dir, f"_{task}_tmp")
+    if os.path.isdir(tmp):
+        shutil.rmtree(tmp)
+    os.makedirs(tmp, exist_ok=True)
 
+    with zipfile.ZipFile(zip_fp, 'r') as zf:
+        zf.extractall(tmp)
+    os.remove(zip_fp)
 
-def format_mrpc(data_dir, path_to_data):
-    print("Processing MRPC...")
-    mrpc_dir = os.path.join(data_dir, "MRPC")
-    os.makedirs(mrpc_dir, exist_ok=True)
-
-    # determine train/test sources
-    if path_to_data:
-        train_src = os.path.join(path_to_data, "msr_paraphrase_train.txt")
-        test_src = os.path.join(path_to_data, "msr_paraphrase_test.txt")
+    entries_top = os.listdir(tmp)
+    if len(entries_top)==1 and os.path.isdir(os.path.join(tmp, entries_top[0])):
+        base = os.path.join(tmp, entries_top[0])
+        names = os.listdir(base)
     else:
-        train_src = os.path.join(mrpc_dir, "msr_paraphrase_train.txt")
-        test_src = os.path.join(mrpc_dir, "msr_paraphrase_test.txt")
-        try:
-            URLLIB.urlretrieve(default_mrpc_train, train_src)
-            URLLIB.urlretrieve(default_mrpc_test, test_src)
-        except Exception as e:
-            print(f"Error downloading MRPC data: {e}")
-            return
+        base = tmp
+        names = entries_top
 
-    if not os.path.isfile(train_src) or not os.path.isfile(test_src):
-        print(f"Missing train/test files under {mrpc_dir}")
-        return
+    if os.path.isdir(outdir):
+        shutil.rmtree(outdir)
+    os.makedirs(outdir, exist_ok=True)
 
-    # write test.tsv
+    for name in names:
+        shutil.move(os.path.join(base, name), os.path.join(outdir, name))
+    shutil.rmtree(tmp)
+
+    print(f"→ {task}: extracted into `{outdir}/`")
+
+
+def format_mrpc(data_dir: str, mrpc_raw: str):
+    out = os.path.join(data_dir, "mrpc")
+    os.makedirs(out, exist_ok=True)
+
+    if mrpc_raw:
+        train_src = os.path.join(mrpc_raw, "msr_paraphrase_train.txt")
+        test_src  = os.path.join(mrpc_raw, "msr_paraphrase_test.txt")
+    else:
+        print("→ mrpc: downloading raw…")
+        train_src = os.path.join(out, "msr_paraphrase_train.txt")
+        test_src  = os.path.join(out, "msr_paraphrase_test.txt")
+        URLLIB.urlretrieve(MRPC_TRAIN, train_src)
+        URLLIB.urlretrieve(MRPC_TEST,  test_src)
+
+    print("→ mrpc: formatting test.tsv…")
     with io.open(test_src, encoding='utf-8') as fin, \
-            io.open(os.path.join(mrpc_dir, 'test.tsv'), 'w', encoding='utf-8') as fout:
+            io.open(os.path.join(out, "test.tsv"), 'w', encoding='utf-8') as fout:
         fin.readline()
         fout.write("index\t#1 ID\t#2 ID\t#1 String\t#2 String\n")
-        for i, line in enumerate(fin):
-            lab, id1, id2, s1, s2 = line.strip().split('\t')
-            fout.write(f"{i}\t{id1}\t{id2}\t{s1}\t{s2}\n")
+        for idx, line in enumerate(fin):
+            lbl,i1,i2,s1,s2 = line.strip().split('\t')
+            fout.write(f"{idx}\t{i1}\t{i2}\t{s1}\t{s2}\n")
 
-    # ensure dev_ids.tsv present; try multiple sources
-    dev_ids_file = os.path.join(mrpc_dir, "dev_ids.tsv")
-    if not os.path.isfile(dev_ids_file):
-        print("\tFetching dev_ids.tsv from mirrors...")
+    dev_ids = os.path.join(out, "dev_ids.tsv")
+    if not os.path.isfile(dev_ids):
+        print("→ mrpc: fetching dev_ids.tsv…")
         for url in DEV_IDS_SOURCES:
             try:
-                URLLIB.urlretrieve(url, dev_ids_file)
-                print(f"\tDownloaded dev_ids.tsv from {url}")
+                URLLIB.urlretrieve(url, dev_ids)
                 break
-            except Exception:
-                print(f"\tFailed from {url}")
-        if not os.path.isfile(dev_ids_file):
-            print(f"Error: could not download dev_ids.tsv.\nPlease manually place dev_ids.tsv into {mrpc_dir}")
+            except:
+                continue
+        if not os.path.isfile(dev_ids):
+            print(f"!! mrpc: failed to fetch dev_ids.tsv; place it in {out}")
             return
 
-    # load dev IDs
-    dev_pairs = set()
-    with io.open(dev_ids_file, encoding='utf-8') as f:
-        for row in f:
-            a, b = row.strip().split('\t')
-            dev_pairs.add((a, b))
+    pairs = set()
+    with io.open(dev_ids, encoding='utf-8') as f:
+        for line in f:
+            a,b = line.strip().split('\t')
+            pairs.add((a,b))
 
-    # split train/dev
+    print("→ mrpc: splitting train/dev…")
     with io.open(train_src, encoding='utf-8') as fin, \
-            io.open(os.path.join(mrpc_dir, 'train.tsv'), 'w', encoding='utf-8') as fout_tr, \
-            io.open(os.path.join(mrpc_dir, 'dev.tsv'), 'w', encoding='utf-8') as fout_dev:
+            io.open(os.path.join(out, "train.tsv"), 'w', encoding='utf-8') as tr, \
+            io.open(os.path.join(out, "dev.tsv"),   'w', encoding='utf-8') as dv:
         header = fin.readline()
-        fout_tr.write(header)
-        fout_dev.write(header)
+        tr.write(header)
+        dv.write(header)
         for line in fin:
-            lab, id1, id2, s1, s2 = line.strip().split('\t')
-            if (id1, id2) in dev_pairs:
-                fout_dev.write(line)
-            else:
-                fout_tr.write(line)
+            lbl,i1,i2,s1,s2 = line.strip().split('\t')
+            (dv if (i1,i2) in pairs else tr).write(line)
 
-    print("\tMRPC formatting complete.")
+    print("→ mrpc: done.")
 
 
-def download_diagnostic(data_dir):
-    print("Downloading diagnostic...")
-    diag = os.path.join(data_dir, 'diagnostic')
-    os.makedirs(diag, exist_ok=True)
-    urllib.request.urlretrieve(TASK2PATH['diagnostic'], os.path.join(diag, 'diagnostic.tsv'))
-    print("\tDone.")
-
-
-def get_tasks(names):
-    parts = names.split(',')
-    return tasks.copy() if 'all' in parts else [t for t in parts if t in tasks]
+def fetch_diagnostic(data_dir: str):
+    out = os.path.join(data_dir, "diagnostic")
+    os.makedirs(out, exist_ok=True)
+    dest = os.path.join(out, "diagnostic.tsv")
+    print("→ diagnostic: downloading…")
+    urllib.request.urlretrieve(DIAG_URL, dest)
+    print("→ diagnostic: saved.")
 
 
 def main(argv):
+    # script_dir = folder this .py lives in
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+
     p = argparse.ArgumentParser()
-    p.add_argument('--data_dir', default='glue_data', help='where to save')
-    p.add_argument('--tasks', default='all', help='comma-list or all')
-    p.add_argument('--path_to_mrpc', default='', help='existing MRPC txts')
+    p.add_argument(
+        "--data_dir",
+        default=script_dir,
+        help="where to create <task>/ under (default: ./datasets/ next to this script)"
+    )
+    p.add_argument(
+        "--tasks",
+        default="all",
+        help="comma-separated subset of: " + ",".join(TASKS)
+    )
+    p.add_argument(
+        "--path_to_mrpc",
+        default="",
+        help="existing MRPC txts dir (optional)"
+    )
     args = p.parse_args(argv)
 
-    os.makedirs(args.data_dir, exist_ok=True)
-    for t in get_tasks(args.tasks):
-        if t == 'MRPC':
-            format_mrpc(args.data_dir, args.path_to_mrpc)
-        elif t == 'diagnostic':
-            download_diagnostic(args.data_dir)
+    data_root = args.data_dir
+    os.makedirs(data_root, exist_ok=True)
+
+    req = args.tasks.lower().split(",")
+    to_do = TASKS if "all" in req else [t for t in req if t in TASKS]
+
+    for task in to_do:
+        if task == "mrpc":
+            format_mrpc(data_root, args.path_to_mrpc)
+        elif task == "diagnostic":
+            fetch_diagnostic(data_root)
         else:
-            download_and_extract(t, args.data_dir)
+            fetch_and_unzip(task, data_root)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

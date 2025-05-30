@@ -15,7 +15,7 @@ def load_dataset(dataset):
     """
 
     processor = PROCESSORS[dataset.lower()]()
-    path = 'datasets/glue_data' + dataset.lower().split('-')[0]
+    path = 'datasets/' + dataset.lower().split('-')[0]
 
     train_dataset = None
     valid_dataset = None
