@@ -128,4 +128,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 # datasets
-/datasets/glue_data/
+/datasets/*
+!/datasets/*.sh
+!/datasets/*.py
