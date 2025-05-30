@@ -1,14 +1,11 @@
-import os, shutil
 import sys
+
 sys.path.append(".")
 
 import torch
-from torch import nn
-from tqdm import tqdm
-import dill
-import warnings
 
-from typing import Callable, Union, Dict
+from typing import Dict
+
 try:
     from typing import OrderedDict
 except ImportError:
@@ -18,6 +15,7 @@ from openprompt.pipeline_base import PromptForClassification
 from openprompt import PromptDataLoader
 from openprompt.prompts import *
 from openprompt.utils.logging import logger
+
 
 class DecTRunner(object):
     r"""A runner for DecT
@@ -29,14 +27,15 @@ class DecTRunner(object):
         valid_dataloader (:obj:`PromptDataloader`, optionla): The dataloader to bachify and process the val data.
         test_dataloader (:obj:`PromptDataloader`, optional): The dataloader to bachify and process the test data.
     """
-    def __init__(self, 
+
+    def __init__(self,
                  model: PromptForClassification,
                  train_dataloader: Optional[PromptDataLoader] = None,
                  valid_dataloader: Optional[PromptDataLoader] = None,
                  test_dataloader: Optional[PromptDataLoader] = None,
                  calibrate_dataloader: Optional[PromptDataLoader] = None,
                  id2label: Optional[Dict] = None,
-                 verbalizer = None,
+                 verbalizer=None,
                  ):
         self.model = model.cuda()
         self.train_dataloader = train_dataloader
@@ -47,19 +46,19 @@ class DecTRunner(object):
         self.id2label = id2label
         self.verbalizer = verbalizer
         self.clean = True
-    
+
     def inference_step(self, batch, batch_idx):
         label = batch.pop('label')
         logits = self.model(batch)
         pred = torch.argmax(logits, dim=-1)
         return pred.cpu().tolist(), label.cpu().tolist()
-    
-    def inference_epoch(self, split: str): 
+
+    def inference_epoch(self, split: str):
         outputs = []
         scores = {}
         self.model.eval()
         with torch.no_grad():
-            data_loader = self.valid_dataloader if split=='validation' else self.test_dataloader
+            data_loader = self.valid_dataloader if split == 'validation' else self.test_dataloader
             model_preds, preds, labels = self.verbalizer.test(self.model, data_loader)
             # zs_score = accuracy_score(labels, model_preds)
             score = accuracy_score(labels, preds)
@@ -90,13 +89,13 @@ class DecTRunner(object):
         self.model.verbalizer.train_proto(self.model, self.train_dataloader, self.calibrate_dataloader)
 
         return 0
-    
+
     def test(self, ckpt: Optional[str] = None) -> dict:
         if ckpt:
-            if not self.load_checkpoint(ckpt, load_state = False):
+            if not self.load_checkpoint(ckpt, load_state=False):
                 exit()
         return self.inference_epoch("test")
 
     def run(self, ckpt: Optional[str] = None) -> dict:
         self.fit(ckpt)
-        return self.test(ckpt = None if self.clean else 'best')
+        return self.test(ckpt=None if self.clean else 'best')

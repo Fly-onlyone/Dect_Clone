@@ -1,20 +1,16 @@
-from inspect import Parameter
-import json
-import time
-from os import stat
 import os
-from transformers.file_utils import ModelOutput
-from transformers.tokenization_utils import PreTrainedTokenizer
-from transformers.utils.dummy_pt_objects import PreTrainedModel
-from openprompt.data_utils import InputExample, InputFeatures
-import re
-from openprompt import Verbalizer
+import time
 from typing import *
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import copy
+from openprompt import Verbalizer
+from openprompt.data_utils import InputFeatures
+from transformers.file_utils import ModelOutput
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions, Seq2SeqLMOutput, MaskedLMOutput
+from transformers.tokenization_utils import PreTrainedTokenizer
+
 
 class DecTVerbalizer(Verbalizer):
     r"""
@@ -33,7 +29,8 @@ class DecTVerbalizer(Verbalizer):
         epochs: (:obj:`int`, optional): The training epochs of prototypes.
         model_logits_weight: (:obj:`float`, optional): Weight factor (\lambda) for model logits.
     """
-    def __init__(self, 
+
+    def __init__(self,
                  tokenizer: Optional[PreTrainedTokenizer],
                  classes: Optional[List] = None,
                  num_classes: Optional[Sequence[str]] = None,
@@ -47,7 +44,7 @@ class DecTVerbalizer(Verbalizer):
                  epochs: Optional[int] = 5,
                  model_logits_weight: Optional[float] = 1,
                  save_dir: Optional[str] = None,
-                ):
+                 ):
         super().__init__(tokenizer=tokenizer, num_classes=num_classes, classes=classes)
         self.prefix = prefix
         self.multi_token_handler = multi_token_handler
@@ -59,7 +56,7 @@ class DecTVerbalizer(Verbalizer):
         self.save_dir = save_dir
         self.hidden_dims = hidden_size
         self.head = nn.Linear(self.hidden_dims, self.mid_dim, bias=False)
-        if label_words is not None: # use label words as an initialization
+        if label_words is not None:  # use label words as an initialization
             self.label_words = label_words
         w = torch.empty((self.num_classes, self.mid_dim))
         nn.init.xavier_uniform_(w)
@@ -67,9 +64,9 @@ class DecTVerbalizer(Verbalizer):
         r = torch.ones(self.num_classes)
         self.proto_r = nn.Parameter(r, requires_grad=True)
         self.optimizer = torch.optim.Adam(self.group_parameters_proto, lr=self.lr)
-        
+
     @property
-    def group_parameters_proto(self,):
+    def group_parameters_proto(self, ):
         r"""Include the last layer's parameters
         """
         return [p for n, p in self.head.named_parameters()] + [self.proto_r]
@@ -77,7 +74,7 @@ class DecTVerbalizer(Verbalizer):
     def on_label_words_set(self):
         self.label_words = self.add_prefix(self.label_words, self.prefix)
         self.generate_parameters()
-        
+
     @staticmethod
     def add_prefix(label_words, prefix):
         r"""Add prefix to label words. For example, if a label words is in the middle of a template,
@@ -92,7 +89,7 @@ class DecTVerbalizer(Verbalizer):
         """
         new_label_words = []
         if isinstance(label_words[0], str):
-            label_words = [[w] for w in label_words]  #wrapped it to a list of list of label words.
+            label_words = [[w] for w in label_words]  # wrapped it to a list of list of label words.
 
         for label_words_per_label in label_words:
             new_label_words_per_label = []
@@ -116,20 +113,20 @@ class DecTVerbalizer(Verbalizer):
                 ids_per_label.append(ids)
             all_ids.append(ids_per_label)
 
-        max_len  = max([max([len(ids) for ids in ids_per_label]) for ids_per_label in all_ids])
+        max_len = max([max([len(ids) for ids in ids_per_label]) for ids_per_label in all_ids])
         max_num_label_words = max([len(ids_per_label) for ids_per_label in all_ids])
         words_ids_mask = torch.zeros(max_num_label_words, max_len)
-        words_ids_mask = [[[1]*len(ids) + [0]*(max_len-len(ids)) for ids in ids_per_label]
-                             + [[0]*max_len]*(max_num_label_words-len(ids_per_label)) 
-                             for ids_per_label in all_ids]
-        words_ids = [[ids + [0]*(max_len-len(ids)) for ids in ids_per_label]
-                             + [[0]*max_len]*(max_num_label_words-len(ids_per_label)) 
-                             for ids_per_label in all_ids]
-        
+        words_ids_mask = [[[1] * len(ids) + [0] * (max_len - len(ids)) for ids in ids_per_label]
+                          + [[0] * max_len] * (max_num_label_words - len(ids_per_label))
+                          for ids_per_label in all_ids]
+        words_ids = [[ids + [0] * (max_len - len(ids)) for ids in ids_per_label]
+                     + [[0] * max_len] * (max_num_label_words - len(ids_per_label))
+                     for ids_per_label in all_ids]
+
         words_ids_tensor = torch.tensor(words_ids)
         words_ids_mask = torch.tensor(words_ids_mask)
         self.label_words_ids = nn.Parameter(words_ids_tensor, requires_grad=False)
-        self.words_ids_mask = nn.Parameter(words_ids_mask, requires_grad=False) # A 3-d mask
+        self.words_ids_mask = nn.Parameter(words_ids_mask, requires_grad=False)  # A 3-d mask
         self.label_words_mask = nn.Parameter(torch.clamp(words_ids_mask.sum(dim=-1), max=1), requires_grad=False)
 
     def process_hiddens(self, hiddens: torch.Tensor, model_logits, **kwargs):
@@ -154,7 +151,7 @@ class DecTVerbalizer(Verbalizer):
 
         label_words_logits = logits[:, self.label_words_ids]
         label_words_logits = self.handle_multi_token(label_words_logits, self.words_ids_mask)
-        label_words_logits -= 10000*(1-self.label_words_mask)
+        label_words_logits -= 10000 * (1 - self.label_words_mask)
         label_words_logits = torch.max(label_words_logits, dim=-1, keepdim=True)[0]
         return label_words_logits
 
@@ -178,15 +175,15 @@ class DecTVerbalizer(Verbalizer):
             (:obj:`torch.Tensor`): The final processed logits over the labels (classes).
         """
         # project
-        label_words_logits = self.project(logits, **kwargs)  #Output: (batch_size, num_classes) or  (batch_size, num_classes, num_label_words_per_label)
+        label_words_logits = self.project(logits,
+                                          **kwargs)  # Output: (batch_size, num_classes) or  (batch_size, num_classes, num_label_words_per_label)
 
-        
         if self.post_log_softmax:
             # normalize
             # label_words_probs = self.normalize(label_words_logits)
 
             # calibrate
-            if  hasattr(self, "_calibrate_logits") and self._calibrate_logits is not None:
+            if hasattr(self, "_calibrate_logits") and self._calibrate_logits is not None:
                 label_words_logits = self.calibrate(label_words_probs=label_words_logits)
 
             # convert to logits
@@ -195,7 +192,7 @@ class DecTVerbalizer(Verbalizer):
         # aggreate
         label_logits = self.aggregate(label_words_logits)
         return label_logits
-    
+
     def normalize(self, logits: torch.Tensor) -> torch.Tensor:
         """
         Given logits regarding the entire vocabulary, return the probs over the label words set.
@@ -210,7 +207,6 @@ class DecTVerbalizer(Verbalizer):
         batch_size = logits.shape[0]
         return F.softmax(logits.reshape(batch_size, -1), dim=-1).reshape(*logits.shape)
 
-
     def aggregate(self, label_words_logits: torch.Tensor) -> torch.Tensor:
         r"""Use weight to aggregate the logits of label words.
 
@@ -220,7 +216,7 @@ class DecTVerbalizer(Verbalizer):
         Returns:
             :obj:`torch.Tensor`: The aggregated logits from the label words. 
         """
-        label_words_logits = (label_words_logits * self.label_words_mask).sum(-1)/self.label_words_mask.sum(-1)
+        label_words_logits = (label_words_logits * self.label_words_mask).sum(-1) / self.label_words_mask.sum(-1)
         return label_words_logits
 
     def calibrate(self, label_words_probs: torch.Tensor, **kwargs) -> torch.Tensor:
@@ -235,9 +231,9 @@ class DecTVerbalizer(Verbalizer):
         shape = label_words_probs.shape
         calibrate_label_words_probs = self._calibrate_logits
         assert calibrate_label_words_probs.shape[1:] == label_words_probs.shape[1:] \
-             and calibrate_label_words_probs.shape[0]==1, "shape not match"
-        label_words_probs /= (calibrate_label_words_probs+1e-15)
-        
+               and calibrate_label_words_probs.shape[0] == 1, "shape not match"
+        label_words_probs /= (calibrate_label_words_probs + 1e-15)
+
         return label_words_probs
 
     def process_outputs(self, outputs: Union[torch.Tensor, torch.Tensor], batch: Union[Dict, InputFeatures], **kwargs):
@@ -264,19 +260,18 @@ class DecTVerbalizer(Verbalizer):
         x = F.normalize(torch.unsqueeze(x, -2), p=2, dim=-1)
         dist = torch.norm((x - y), dim=-1) - model_logits * model_logits_weight - r
         return -dist
-    
+
     def loss_func(self, x, model_logits, labels):
         sim_mat = torch.exp(self.sim(x, self.proto, self.proto_r, model_logits, self.model_logits_weight))
         pos_score = torch.sum(sim_mat * F.one_hot(labels), -1)
         loss = -torch.mean(torch.log(pos_score / sim_mat.sum(-1)))
-        
+
         return loss
-    
 
     def test(self, model, dataloader):
         batch_size = dataloader.batch_size
         model.eval()
-        #print(self.label_words, self.label_words_ids)
+        # print(self.label_words, self.label_words_ids)
         model_preds, preds, labels = [], [], []
         if os.path.isfile(f"{self.save_dir}/logits.pt"):
             logits = torch.load(f"{self.save_dir}/logits.pt")
@@ -285,7 +280,8 @@ class DecTVerbalizer(Verbalizer):
                 batch = batch.cuda().to_dict()
                 length = len(batch['label'])
                 labels.extend(batch.pop('label').cpu().tolist())
-                batch_hidden, batch_logits = hiddens[i*batch_size: i*batch_size+length], logits[i*batch_size: i*batch_size+length]
+                batch_hidden, batch_logits = hiddens[i * batch_size: i * batch_size + length], logits[
+                                                                                               i * batch_size: i * batch_size + length]
                 proto = self.process_hiddens(batch_hidden, batch_logits)
                 model_pred = torch.argmax(batch_logits, dim=-1)
                 pred = torch.argmax(proto, dim=-1)
@@ -293,14 +289,15 @@ class DecTVerbalizer(Verbalizer):
                 model_preds.extend(model_pred.cpu().tolist())
 
         else:
-            logits, hiddens= [], []
+            logits, hiddens = [], []
             with torch.no_grad():
                 for i, batch in enumerate(dataloader):
                     batch = batch.cuda().to_dict()
                     labels.extend(batch.pop('label').cpu().tolist())
                     outputs = model.prompt_model(batch)
                     outputs = self.gather_outputs(outputs)
-                    batch_hidden, batch_logits = model.extract_at_mask(outputs[0], batch), model.extract_at_mask(outputs[1], batch)
+                    batch_hidden, batch_logits = model.extract_at_mask(outputs[0], batch), model.extract_at_mask(
+                        outputs[1], batch)
                     model_logits = self.process_logits(batch_logits)
                     logits.append(model_logits)
                     hiddens.append(batch_hidden)
@@ -309,13 +306,13 @@ class DecTVerbalizer(Verbalizer):
                     pred = torch.argmax(proto, dim=-1)
                     preds.extend(pred.cpu().tolist())
                     model_preds.extend(model_pred.cpu().tolist())
-            
+
             logits = torch.cat(logits, dim=0)
             hiddens = torch.cat(hiddens, dim=0)
-            
+
             torch.save(logits, f"{self.save_dir}/logits.pt")
             torch.save(hiddens, f"{self.save_dir}/hiddens.pt")
-        #print(logits[:10], logits.size())
+        # print(logits[:10], logits.size())
         return model_preds, preds, labels
 
     def train_proto(self, model, dataloader, calibrate_dataloader):
@@ -348,7 +345,7 @@ class DecTVerbalizer(Verbalizer):
                     labels[label].append(label)
                     embeds[label].append(hidden[j])
                     model_logits[label].append(logits[j])
-            
+
         embeds = list(map(torch.stack, embeds))
         labels = torch.cat(list(map(torch.stack, labels)))
         model_logits = torch.cat(list(map(torch.stack, model_logits)))
@@ -357,7 +354,7 @@ class DecTVerbalizer(Verbalizer):
         self.proto_r.data = torch.stack(dist)
 
         loss = 0.
-        
+
         for epoch in range(self.epochs):
             x = self.head(torch.cat(embeds))
             self.optimizer.zero_grad()
@@ -367,11 +364,3 @@ class DecTVerbalizer(Verbalizer):
         print("Total epoch: {}. DecT loss: {}".format(self.epochs, loss))
         end_time = time.time()
         print("Training time: {}".format(end_time - start_time))
-
-    
-
-        
-
-
-    
-        

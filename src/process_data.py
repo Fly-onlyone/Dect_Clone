@@ -1,12 +1,12 @@
+import csv
+import json
 import os
-import json, csv
-from abc import ABC, abstractmethod
-from collections import defaultdict, Counter
-from typing import *
+
 import pandas as pd
-from openprompt.utils.logging import logger
-from openprompt.data_utils.utils import InputExample
 from openprompt.data_utils.data_processor import DataProcessor
+from openprompt.data_utils.utils import InputExample
+from openprompt.utils.logging import logger
+
 
 def load_dataset(dataset):
     r"""A dataset loader using a global config.
@@ -15,11 +15,11 @@ def load_dataset(dataset):
     """
 
     processor = PROCESSORS[dataset.lower()]()
-    path = 'datasets/' + dataset.lower().split('-')[0]
+    path = 'datasets/glue_data' + dataset.lower().split('-')[0]
 
     train_dataset = None
     valid_dataset = None
-    
+
     try:
         train_dataset = processor.get_train_examples(path)
     except FileNotFoundError:
@@ -36,20 +36,21 @@ def load_dataset(dataset):
         logger.warning(f"Has no test dataset in {path}.")
     # checking whether donwloaded.
     if (train_dataset is None) and \
-       (valid_dataset is None) and \
-       (test_dataset is None):
-        logger.error("Dataset is empty. Either there is no download or the path is wrong. "+ \
-        "If not downloaded, please `cd datasets/` and `bash download_xxx.sh`")
+            (valid_dataset is None) and \
+            (test_dataset is None):
+        logger.error("Dataset is empty. Either there is no download or the path is wrong. " + \
+                     "If not downloaded, please `cd datasets/` and `bash download_xxx.sh`")
         exit()
     return train_dataset, valid_dataset, test_dataset, processor
-        
+
 
 class MnlimmProcessor(DataProcessor):
     # TODO Test needed
     dataset_project = {"train": "train",
-                        "dev": "train",
-                        "test": "dev_mismatched"
-                        }
+                       "dev": "train",
+                       "test": "dev_mismatched"
+                       }
+
     def __init__(self):
         super().__init__()
         self.labels = ["contradiction", "entailment", "neutral"]
@@ -67,15 +68,17 @@ class MnlimmProcessor(DataProcessor):
                 example = InputExample(
                     guid=str(0), text_a=text_a, text_b=text_b, label=label)
                 examples.append(example)
-                
+
         return examples
+
 
 class MnlimProcessor(DataProcessor):
     # TODO Test needed
     dataset_project = {"train": "train",
-                        "dev": "train",
-                        "test": "dev_matched"
-                        }
+                       "dev": "train",
+                       "test": "dev_matched"
+                       }
+
     def __init__(self):
         super().__init__()
         self.labels = ["contradiction", "entailment", "neutral"]
@@ -93,7 +96,7 @@ class MnlimProcessor(DataProcessor):
                 example = InputExample(
                     guid=str(0), text_a=text_a, text_b=text_b, label=label)
                 examples.append(example)
-                
+
         return examples
 
 
@@ -117,10 +120,11 @@ class AgnewsProcessor(DataProcessor):
                 label, headline, body = row
                 text_a = headline.replace('\\', ' ')
                 text_b = body.replace('\\', ' ')
-                example = InputExample(guid=str(idx), text_a=text_a, text_b=text_b, label=int(label)-1)
+                example = InputExample(guid=str(idx), text_a=text_a, text_b=text_b, label=int(label) - 1)
                 examples.append(example)
         return examples
-    
+
+
 class DBpediaProcessor(DataProcessor):
     """
     `Dbpedia <https://aclanthology.org/L16-1532.pdf>`_ is a Wikipedia Topic Classification dataset.
@@ -130,22 +134,23 @@ class DBpediaProcessor(DataProcessor):
 
     def __init__(self):
         super().__init__()
-        self.labels = ["company", "school", "artist", "athlete", "politics", "transportation", "building", "river", "village", "animal", "plant", "album", "film", "book",]
+        self.labels = ["company", "school", "artist", "athlete", "politics", "transportation", "building", "river",
+                       "village", "animal", "plant", "album", "film", "book", ]
 
     def get_examples(self, data_dir, split):
         examples = []
-        label_file  = open(os.path.join(data_dir,"{}_labels.txt".format(split)),'r') 
-        labels  = [int(x.strip()) for x in label_file.readlines()]
-        with open(os.path.join(data_dir,'{}.txt'.format(split)),'r') as fin:
+        label_file = open(os.path.join(data_dir, "{}_labels.txt".format(split)), 'r')
+        labels = [int(x.strip()) for x in label_file.readlines()]
+        with open(os.path.join(data_dir, '{}.txt'.format(split)), 'r') as fin:
             for idx, line in enumerate(fin):
                 splited = line.strip().split(". ")
                 text_a, text_b = splited[0], splited[1:]
-                text_a = text_a+"."
+                text_a = text_a + "."
                 text_b = ". ".join(text_b)
                 example = InputExample(guid=str(idx), text_a=text_a, text_b=text_b, label=int(labels[idx]))
                 examples.append(example)
         return examples
-    
+
 
 class ImdbProcessor(DataProcessor):
     """
@@ -160,21 +165,21 @@ class ImdbProcessor(DataProcessor):
 
     def get_examples(self, data_dir, split):
         examples = []
-        label_file = open(os.path.join(data_dir, "{}_labels.txt".format(split)), 'r') 
+        label_file = open(os.path.join(data_dir, "{}_labels.txt".format(split)), 'r')
         labels = [int(x.strip()) for x in label_file.readlines()]
-        with open(os.path.join(data_dir, '{}.txt'.format(split)),'r') as fin:
+        with open(os.path.join(data_dir, '{}.txt'.format(split)), 'r') as fin:
             for idx, line in enumerate(fin):
                 text_a = line.strip()
                 example = InputExample(guid=str(idx), text_a=text_a, label=int(labels[idx]))
                 examples.append(example)
         return examples
 
-
     @staticmethod
     def get_test_labels_only(data_dir, dirname):
-        label_file  = open(os.path.join(data_dir,dirname,"{}_labels.txt".format('test')),'r') 
-        labels  = [int(x.strip()) for x in label_file.readlines()]
+        label_file = open(os.path.join(data_dir, dirname, "{}_labels.txt".format('test')), 'r')
+        labels = [int(x.strip()) for x in label_file.readlines()]
         return labels
+
 
 class YahooProcessor(DataProcessor):
     """
@@ -183,8 +188,9 @@ class YahooProcessor(DataProcessor):
 
     def __init__(self):
         super().__init__()
-        self.labels = ["Society & Culture", "Science & Mathematics", "Health", "Education & Reference", "Computers & Internet", "Sports", "Business & Finance", "Entertainment & Music"
-                        ,"Family & Relationships", "Politics & Government"]
+        self.labels = ["Society & Culture", "Science & Mathematics", "Health", "Education & Reference",
+                       "Computers & Internet", "Sports", "Business & Finance", "Entertainment & Music"
+            , "Family & Relationships", "Politics & Government"]
 
     def get_examples(self, data_dir, split):
         path = os.path.join(data_dir, "{}.csv".format(split))
@@ -196,7 +202,7 @@ class YahooProcessor(DataProcessor):
                 text_a = ' '.join([question_title.replace('\\n', ' ').replace('\\', ' '),
                                    question_body.replace('\\n', ' ').replace('\\', ' ')])
                 text_b = answer.replace('\\n', ' ').replace('\\', ' ')
-                example = InputExample(guid=str(idx), text_a=text_a, text_b=text_b, label=int(label)-1)
+                example = InputExample(guid=str(idx), text_a=text_a, text_b=text_b, label=int(label) - 1)
                 examples.append(example)
         return examples
 
@@ -209,17 +215,18 @@ class SST2Processor(DataProcessor):
 
     """
     dataset_project = {"train": "train",
-                        "dev": "train",
-                        "test": "dev"
-                        }
+                       "dev": "train",
+                       "test": "dev"
+                       }
+
     def __init__(self):
         super().__init__()
         self.labels = ['0', '1']
-    
+
     def get_examples(self, data_dir, split):
         path = os.path.join(data_dir, f"{self.dataset_project[split]}.tsv")
         examples = []
-        with open(path, encoding='utf-8')as f:
+        with open(path, encoding='utf-8') as f:
             lines = f.readlines()
             for idx, line in enumerate(lines[1:]):
                 linelist = line.strip().split('\t')
@@ -233,9 +240,10 @@ class SST2Processor(DataProcessor):
 
 class SnliProcessor(DataProcessor):
     dataset_project = {"train": "snli_1.0_train",
-                        "dev": "snli_1.0_train",
-                        "test": "snli_1.0_dev"
-                        }
+                       "dev": "snli_1.0_train",
+                       "test": "snli_1.0_dev"
+                       }
+
     def __init__(self):
         super().__init__()
         self.labels = ["contradiction", "entailment", "neutral"]
@@ -243,7 +251,7 @@ class SnliProcessor(DataProcessor):
     def get_examples(self, data_dir, split):
         path = os.path.join(data_dir, "{}.jsonl".format(self.dataset_project[split]))
         examples = []
-        with open(path)as f:
+        with open(path) as f:
             lines = f.readlines()
             for idx, line in enumerate(lines):
                 data = json.loads(line)
@@ -253,15 +261,17 @@ class SnliProcessor(DataProcessor):
                     continue
                 label = self.get_label_id(data["gold_label"])
                 example = InputExample(
-                        guid=str(idx), text_a=text_a, text_b=text_b, label=label)
+                    guid=str(idx), text_a=text_a, text_b=text_b, label=label)
                 examples.append(example)
         return examples
 
+
 class YelpProcessor(DataProcessor):
     dataset_project = {"train": "train",
-                        "dev": "train",
-                        "test": "test"
-                        }
+                       "dev": "train",
+                       "test": "test"
+                       }
+
     def __init__(self):
         super().__init__()
         self.labels = ["1", "2"]
@@ -274,16 +284,17 @@ class YelpProcessor(DataProcessor):
             text_a = text
             label = self.get_label_id(str(label))
             example = InputExample(
-                    guid=str(idx), text_a=text_a, text_b="", label=label)
+                guid=str(idx), text_a=text_a, text_b="", label=label)
             examples.append(example)
         return examples
 
 
 class RteProcessor(DataProcessor):
     dataset_project = {"train": "train",
-                        "dev": "train",
-                        "test": "dev"
-                        }
+                       "dev": "train",
+                       "test": "dev"
+                       }
+
     def __init__(self):
         super().__init__()
         self.labels = ["not_entailment", "entailment"]
@@ -291,7 +302,7 @@ class RteProcessor(DataProcessor):
     def get_examples(self, data_dir, split):
         path = os.path.join(data_dir, "{}.tsv".format(self.dataset_project[split]))
         examples = []
-        with open(path)as f:
+        with open(path) as f:
             lines = f.readlines()
             for idx, line in enumerate(lines[1:]):
                 line_list = line.strip().split('\t')
@@ -299,9 +310,10 @@ class RteProcessor(DataProcessor):
                 text_b = line_list[-2]
                 label = self.get_label_id(line_list[-1])
                 example = InputExample(
-                        guid=str(idx), text_a=text_a, text_b=text_b, label=label)
+                    guid=str(idx), text_a=text_a, text_b=text_b, label=label)
                 examples.append(example)
         return examples
+
 
 class FewNERDProcessor(DataProcessor):
     """
@@ -309,17 +321,27 @@ class FewNERDProcessor(DataProcessor):
 
     It was released together with `Few-NERD: Not Only a Few-shot NER Dataset (Ning Ding et al. 2021) <https://arxiv.org/pdf/2105.07464.pdf>`_
     """
+
     def __init__(self):
         super().__init__()
         self.labels = [
-            "person-actor", "person-director", "person-artist/author", "person-athlete", "person-politician", "person-scholar", "person-soldier", "person-other",
-            "organization-showorganization", "organization-religion", "organization-company", "organization-sportsteam", "organization-education", "organization-government/governmentagency", "organization-media/newspaper", "organization-politicalparty", "organization-sportsleague", "organization-other",
-            "location-GPE", "location-road/railway/highway/transit", "location-bodiesofwater", "location-park", "location-mountain", "location-island", "location-other",
-            "product-software", "product-food", "product-game", "product-ship", "product-train", "product-airplane", "product-car", "product-weapon", "product-other",
-            "building-theater", "building-sportsfacility", "building-airport", "building-hospital", "building-library", "building-hotel", "building-restaurant", "building-other",
-            "event-sportsevent", "event-attack/battle/war/militaryconflict", "event-disaster", "event-election", "event-protest", "event-other",
+            "person-actor", "person-director", "person-artist/author", "person-athlete", "person-politician",
+            "person-scholar", "person-soldier", "person-other",
+            "organization-showorganization", "organization-religion", "organization-company", "organization-sportsteam",
+            "organization-education", "organization-government/governmentagency", "organization-media/newspaper",
+            "organization-politicalparty", "organization-sportsleague", "organization-other",
+            "location-GPE", "location-road/railway/highway/transit", "location-bodiesofwater", "location-park",
+            "location-mountain", "location-island", "location-other",
+            "product-software", "product-food", "product-game", "product-ship", "product-train", "product-airplane",
+            "product-car", "product-weapon", "product-other",
+            "building-theater", "building-sportsfacility", "building-airport", "building-hospital", "building-library",
+            "building-hotel", "building-restaurant", "building-other",
+            "event-sportsevent", "event-attack/battle/war/militaryconflict", "event-disaster", "event-election",
+            "event-protest", "event-other",
             "art-music", "art-writtenart", "art-film", "art-painting", "art-broadcastprogram", "art-other",
-            "other-biologything", "other-chemicalthing", "other-livingthing", "other-astronomything", "other-god", "other-law", "other-award", "other-disease", "other-medical", "other-language", "other-currency", "other-educationaldegree",
+            "other-biologything", "other-chemicalthing", "other-livingthing", "other-astronomything", "other-god",
+            "other-law", "other-award", "other-disease", "other-medical", "other-language", "other-currency",
+            "other-educationaldegree",
         ]
 
     def get_examples(self, data_dir, split):
@@ -333,11 +355,12 @@ class FewNERDProcessor(DataProcessor):
                 for span in spans:
                     text_a = " ".join(xs)
                     meta = {
-                        "entity": " ".join(xs[span[0]: span[1]+1])
+                        "entity": " ".join(xs[span[0]: span[1] + 1])
                     }
-                    example = InputExample(guid=str(idx), text_a=text_a, meta=meta, label=self.get_label_id(ys[span[0]][2:]))
+                    example = InputExample(guid=str(idx), text_a=text_a, meta=meta,
+                                           label=self.get_label_id(ys[span[0]][2:]))
                     examples.append(example)
-        
+
         return examples
 
     @staticmethod
@@ -368,6 +391,7 @@ class FewNERDProcessor(DataProcessor):
                         spans[-1][-1] = len(ys)
                 ys.append(tag)
         return data
+
 
 PROCESSORS = {
     "agnews": AgnewsProcessor,
