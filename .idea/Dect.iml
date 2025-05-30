@@ -3,6 +3,16 @@
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/datasets/cola" />
+      <excludeFolder url="file://$MODULE_DIR$/datasets/diagnostic" />
+      <excludeFolder url="file://$MODULE_DIR$/datasets/mnli" />
+      <excludeFolder url="file://$MODULE_DIR$/datasets/mrpc" />
+      <excludeFolder url="file://$MODULE_DIR$/datasets/qnli" />
+      <excludeFolder url="file://$MODULE_DIR$/datasets/qqp" />
+      <excludeFolder url="file://$MODULE_DIR$/datasets/rte" />
+      <excludeFolder url="file://$MODULE_DIR$/datasets/sst2" />
+      <excludeFolder url="file://$MODULE_DIR$/datasets/sts" />
+      <excludeFolder url="file://$MODULE_DIR$/datasets/wnli" />
     </content>
     <orderEntry type="jdk" jdkName="Project" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
